@@ -11,10 +11,10 @@ Watches a folder for `.zip` files and serves the latest one via HTTP.
 | Endpoint | Description |
 |---|---|
 | `GET /` | Info page with current zip name and size |
-| `GET /status` | JSON with `status`, `name`, `size`, `mtime`, `md5` |
+| `GET /status` | JSON with `status`, `name`, `size`, `mtime` |
 | `GET /download` | Streams the zip file as `application/zip` |
 
-The server computes an MD5 hash of the zip on each `/status` request so clients can detect content changes even when modification times are preserved.
+Dedup uses `name@mtime` — if a zip is replaced in-place with the same modification time, the client won't detect the change.
 
 **Config:** CLI args or `server.json` (auto-created):
 ```
@@ -27,15 +27,15 @@ The server computes an MD5 hash of the zip on each `/status` request so clients 
 
 Polls the server at a configurable interval and processes new zips.
 
-1. **Download** — fetches the zip if `name@md5` differs from the last download
+1. **Download** — fetches the zip if `name@mtime` differs from the last download
 2. **Inspect** — finds the root `.sh` script and root folder name inside the zip, writes metadata to `<script>.json`
 3. **Auto-run** — if `/roms/ports/PortMaster/autoinstall` has no zips, runs the `.sh` script from `/roms/ports/` and captures output to `sdt.log`
-4. **Screenshot** — waits 2s, then captures a screenshot via `spectacle`
+4. **Screenshot** — waits 2s, then captures a screenshot via the configured command
 5. **Kill** — kills all child processes (except `tee`) via SIGKILL, then waits for the script to finish
 6. **Collect** — copies `/roms/ports/<foldername>/log.txt` to `dest/log.txt`
 7. **Archive** — moves all files into `dest/<foldername>_<timestamp>/`
 
-Dedup uses `name@md5` — any content change triggers a re-download regardless of file timestamp.
+Dedup uses `name@mtime` — replaced-on a zip with the same timestamp will not trigger a re-download.
 
 **Config:** CLI args or `client.json` (auto-created):
 ```
@@ -43,10 +43,11 @@ Dedup uses `name@md5` — any content change triggers a re-download regardless o
 --port PORT       Server port (default: 8765)
 --interval SECS   Poll interval (default: 30)
 --dest DIR        Download destination (default: ./downloads)
+--screenshot-cmd  Screenshot command with {} for output path (default: spectacle -b -n -o {})
 ```
 
 ## Requirements
 
 - Python 3.10+
-- `spectacle` (KDE screenshot tool) — for the screenshot feature
 - Linux with `/proc` — for process tree walking
+- Screenshot tool (default: `spectacle`, configurable via `--screenshot-cmd`)
