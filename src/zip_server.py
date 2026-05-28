@@ -13,6 +13,7 @@ Defaults:
 
 import argparse
 from datetime import datetime
+import hashlib
 import json
 import os
 import sys
@@ -28,6 +29,19 @@ def log(msg: str) -> None:
 DEFAULT_HOST   = "0.0.0.0"
 DEFAULT_PORT   = 8765
 DEFAULT_FOLDER = "./serve_folder"
+
+CONFIG_FILE = os.path.join(os.path.dirname(__file__), "server.json")
+
+
+def load_config() -> dict:
+    defaults = {"host": DEFAULT_HOST, "port": DEFAULT_PORT, "folder": DEFAULT_FOLDER}
+    if os.path.isfile(CONFIG_FILE):
+        with open(CONFIG_FILE) as fh:
+            return {**defaults, **json.load(fh)}
+    with open(CONFIG_FILE, "w") as fh:
+        json.dump(defaults, fh, indent=2)
+        fh.write("\n")
+    return defaults
 
 
 def find_latest_zip(folder: str) -> str | None:
@@ -89,7 +103,11 @@ class ZipHandler(BaseHTTPRequestHandler):
         name = os.path.basename(zip_path)
         size = os.path.getsize(zip_path)
         mtime = os.path.getmtime(zip_path)
-        self._send_text(200, json.dumps({"status": "available", "name": name, "size": size, "mtime": round(mtime)}) + "\n")
+        md5hash = hashlib.md5()
+        with open(zip_path, "rb") as fh:
+            while chunk := fh.read(65536):
+                md5hash.update(chunk)
+        self._send_text(200, json.dumps({"status": "available", "name": name, "size": size, "mtime": round(mtime), "md5": md5hash.hexdigest()}) + "\n")
 
     def _handle_download(self):
         zip_path = find_latest_zip(self.serve_folder)
@@ -137,10 +155,12 @@ class ZipHandler(BaseHTTPRequestHandler):
 # Entry point
 # ---------------------------------------------------------------------------
 def main():
+    config = load_config()
+
     parser = argparse.ArgumentParser(description="Zip-file HTTP server")
-    parser.add_argument("--host",   default=DEFAULT_HOST,   help=f"Bind address (default: {DEFAULT_HOST})")
-    parser.add_argument("--port",   default=DEFAULT_PORT,   type=int, help=f"Port (default: {DEFAULT_PORT})")
-    parser.add_argument("--folder", default=DEFAULT_FOLDER, help=f"Folder to watch for zip files (default: {DEFAULT_FOLDER})")
+    parser.add_argument("--host",   default=config["host"],   help=f"Bind address (default: {config['host']})")
+    parser.add_argument("--port",   default=config["port"],   type=int, help=f"Port (default: {config['port']})")
+    parser.add_argument("--folder", default=config["folder"], help=f"Folder to watch for zip files (default: {config['folder']})")
     args = parser.parse_args()
 
     # Ensure the folder exists
