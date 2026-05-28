@@ -16,10 +16,16 @@ The client checks every <interval> seconds.  When a zip becomes available
 """
 
 import argparse
+from datetime import datetime
+import json
 import os
 import time
 import urllib.error
 import urllib.request
+
+
+def log(msg: str) -> None:
+    print(f"[{datetime.now().isoformat()}] {msg}")
 
 # ---------------------------------------------------------------------------
 # Configuration defaults
@@ -51,15 +57,14 @@ def fetch_status(host: str, port: int) -> dict | None:
         with urllib.request.urlopen(url, timeout=CONNECT_TIMEOUT) as resp:
             body = resp.read().decode().strip()
     except (urllib.error.URLError, OSError) as exc:
-        print(f"[client] Could not reach server: {exc}")
+        log(f"[client] Could not reach server: {exc}")
         return None
 
-    # Parse "key=value key=value …" pairs
-    result: dict = {}
-    for token in body.split():
-        if "=" in token:
-            k, v = token.split("=", 1)
-            result[k] = v
+    try:
+        result: dict = json.loads(body)
+    except json.JSONDecodeError:
+        log(f"[client] Invalid status response: {body!r}")
+        return {"status": "none"}
     return result
 
 
@@ -71,7 +76,7 @@ def download_zip(host: str, port: int, dest: str, expected_name: str) -> bool:
     url      = build_url(host, port, "/download")
     out_path = os.path.join(dest, expected_name)
 
-    print(f"[client] Downloading {expected_name} …")
+    log(f"[client] Downloading {expected_name} …")
     try:
         with urllib.request.urlopen(url, timeout=CONNECT_TIMEOUT) as resp:
             os.makedirs(dest, exist_ok=True)
@@ -82,11 +87,11 @@ def download_zip(host: str, port: int, dest: str, expected_name: str) -> bool:
                         break
                     fh.write(chunk)
     except (urllib.error.URLError, OSError) as exc:
-        print(f"[client] Download failed: {exc}")
+        log(f"[client] Download failed: {exc}")
         return False
 
     size = os.path.getsize(out_path)
-    print(f"[client] Saved to {os.path.abspath(out_path)} ({size} bytes)")
+    log(f"[client] Saved to {os.path.abspath(out_path)} ({size} bytes)")
     return True
 
 
@@ -94,9 +99,9 @@ def download_zip(host: str, port: int, dest: str, expected_name: str) -> bool:
 # Main polling loop
 # ---------------------------------------------------------------------------
 def run_client(host: str, port: int, interval: int, dest: str):
-    print(f"[client] Polling http://{host}:{port} every {interval}s")
-    print(f"[client] Downloads will be saved to: {os.path.abspath(dest)}")
-    print(f"[client] Press Ctrl+C to stop.\n")
+    log(f"[client] Polling http://{host}:{port} every {interval}s")
+    log(f"[client] Downloads will be saved to: {os.path.abspath(dest)}")
+    log(f"[client] Press Ctrl+C to stop.\n")
 
     last_downloaded: str | None = None   # filename of the last file we fetched
 
@@ -108,7 +113,7 @@ def run_client(host: str, port: int, interval: int, dest: str):
             pass
 
         elif status.get("status") == "none":
-            print(f"[client] No zip available on server.")
+            log(f"[client] No zip available on server.")
 
         else:
             name  = status.get("name", "")
@@ -119,14 +124,14 @@ def run_client(host: str, port: int, interval: int, dest: str):
             file_key = f"{name}@{mtime}"
 
             if file_key == last_downloaded:
-                print(f"[client] {name} ({size} bytes) — already downloaded, skipping.")
+                log(f"[client] {name} ({size} bytes) — already downloaded, skipping.")
             else:
-                print(f"[client] New zip found: {name} ({size} bytes)")
+                log(f"[client] New zip found: {name} ({size} bytes)")
                 ok = download_zip(host, port, dest, name)
                 if ok:
                     last_downloaded = file_key
 
-        print(f"[client] Next check in {interval}s …\n")
+        log(f"[client] Next check in {interval}s …\n")
         try:
             time.sleep(interval)
         except KeyboardInterrupt:
@@ -149,7 +154,7 @@ def main():
     except KeyboardInterrupt:
         pass
 
-    print("\n[client] Stopped.")
+    log(f"[client] Stopped.")
 
 
 if __name__ == "__main__":

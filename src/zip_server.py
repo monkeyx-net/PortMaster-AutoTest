@@ -12,9 +12,15 @@ Defaults:
 """
 
 import argparse
+from datetime import datetime
+import json
 import os
 import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
+
+
+def log(msg: str) -> None:
+    print(f"[{datetime.now().isoformat()}] {msg}")
 
 # ---------------------------------------------------------------------------
 # Configuration defaults
@@ -78,12 +84,12 @@ class ZipHandler(BaseHTTPRequestHandler):
     def _handle_status(self):
         zip_path = find_latest_zip(self.serve_folder)
         if zip_path is None:
-            self._send_text(200, "status=none\n")
+            self._send_text(200, json.dumps({"status": "none"}) + "\n")
             return
         name = os.path.basename(zip_path)
         size = os.path.getsize(zip_path)
         mtime = os.path.getmtime(zip_path)
-        self._send_text(200, f"status=available name={name} size={size} mtime={mtime:.0f}\n")
+        self._send_text(200, json.dumps({"status": "available", "name": name, "size": size, "mtime": round(mtime)}) + "\n")
 
     def _handle_download(self):
         zip_path = find_latest_zip(self.serve_folder)
@@ -108,10 +114,10 @@ class ZipHandler(BaseHTTPRequestHandler):
                         break
                     self.wfile.write(chunk)
 
-            print(f"[server] Sent {filename} ({size} bytes) to {self.client_address[0]}")
+            log(f"[server] Sent {filename} ({size} bytes) to {self.client_address[0]}")
 
         except (BrokenPipeError, ConnectionResetError):
-            print(f"[server] Client {self.client_address[0]} disconnected mid-transfer.")
+            log(f"[server] Client {self.client_address[0]} disconnected mid-transfer.")
 
     # ------------------------------------------------------------------
     def _send_text(self, code: int, body: str):
@@ -124,7 +130,7 @@ class ZipHandler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         # Slightly cleaner log format
-        print(f"[server] {self.client_address[0]} - {fmt % args}")
+        log(f"[server] {self.client_address[0]} - {fmt % args}")
 
 
 # ---------------------------------------------------------------------------
@@ -144,15 +150,15 @@ def main():
     ZipHandler.serve_folder = args.folder
 
     server = HTTPServer((args.host, args.port), ZipHandler)
-    print(f"[server] Listening on {args.host}:{args.port}")
-    print(f"[server] Watching folder : {os.path.abspath(args.folder)}")
-    print(f"[server] Endpoints       : GET /  |  GET /status  |  GET /download")
-    print(f"[server] Press Ctrl+C to stop.\n")
+    log(f"[server] Listening on {args.host}:{args.port}")
+    log(f"[server] Watching folder : {os.path.abspath(args.folder)}")
+    log(f"[server] Endpoints       : GET /  |  GET /status  |  GET /download")
+    log(f"[server] Press Ctrl+C to stop.\n")
 
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\n[server] Shutting down.")
+        log(f"[server] Shutting down.")
         server.server_close()
 
 
