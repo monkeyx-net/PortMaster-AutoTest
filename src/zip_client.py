@@ -19,6 +19,7 @@ import argparse
 import glob
 import json
 import os
+import shlex
 import shutil
 import signal
 import subprocess
@@ -62,6 +63,7 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 DEFAULT_INTERVAL = 30  # seconds
 DEFAULT_DEST = "./downloads"
+DEFAULT_SCREENSHOT_CMD = "spectacle -b -n -o {}"
 
 CONNECT_TIMEOUT = 10  # seconds for HTTP connect / read
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "client.json")
@@ -73,6 +75,7 @@ def load_config() -> dict:
         "port": DEFAULT_PORT,
         "interval": DEFAULT_INTERVAL,
         "dest": DEFAULT_DEST,
+        "screenshot_cmd": DEFAULT_SCREENSHOT_CMD,
     }
     if os.path.isfile(CONFIG_FILE):
         with open(CONFIG_FILE) as fh:
@@ -113,7 +116,7 @@ def fetch_status(host: str, port: int) -> dict | None:
     return result
 
 
-def download_zip(host: str, port: int, dest: str, expected_name: str) -> bool:
+def download_zip(host: str, port: int, dest: str, expected_name: str, screenshot_cmd: str = DEFAULT_SCREENSHOT_CMD) -> bool:
     """
     Stream GET /download to dest/<expected_name>.
     Returns True on success, False on failure.
@@ -183,7 +186,7 @@ def download_zip(host: str, port: int, dest: str, expected_name: str) -> bool:
 
                 time.sleep(2)
                 screenshot_path = os.path.join(dest, "screenshot.png")
-                subprocess.run(["spectacle", "-b", "-n", "-o", screenshot_path])
+                subprocess.run(shlex.split(screenshot_cmd.replace("{}", screenshot_path)))
                 log(f"[client] Saved screenshot to {screenshot_path}")
 
                 _kill_descendants(proc.pid)
@@ -212,10 +215,10 @@ def download_zip(host: str, port: int, dest: str, expected_name: str) -> bool:
 # ---------------------------------------------------------------------------
 # Main polling loop
 # ---------------------------------------------------------------------------
-def run_client(host: str, port: int, interval: int, dest: str):
+def run_client(host: str, port: int, interval: int, dest: str, screenshot_cmd: str = DEFAULT_SCREENSHOT_CMD):
     log(f"[client] Polling http://{host}:{port} every {interval}s")
     log(f"[client] Downloads will be saved to: {os.path.abspath(dest)}")
-    log(f"[client] Press Ctrl+C to stop.\n")
+    log("[client] Press Ctrl+C to stop.\n")
 
     last_downloaded: str | None = None  # filename of the last file we fetched
 
@@ -227,20 +230,20 @@ def run_client(host: str, port: int, interval: int, dest: str):
             pass
 
         elif status.get("status") == "none":
-            log(f"[client] No zip available on server.")
+            log("[client] No zip available on server.")
 
         else:
             name = status.get("name", "")
             size = status.get("size", "?")
-            md5 = status.get("md5", "0")
+            mtime = status.get("mtime", "0")
 
-            file_key = f"{name}@{md5}"
+            file_key = f"{name}@{mtime}"
 
             if file_key == last_downloaded:
                 log(f"[client] {name} ({size} bytes) — already downloaded, skipping.")
             else:
                 log(f"[client] New zip found: {name} ({size} bytes)")
-                ok = download_zip(host, port, dest, name)
+                ok = download_zip(host, port, dest, name, screenshot_cmd)
                 if ok:
                     last_downloaded = file_key
 
@@ -280,14 +283,19 @@ def main():
         default=config["dest"],
         help=f"Download destination folder (default: {config['dest']})",
     )
+    parser.add_argument(
+        "--screenshot-cmd",
+        default=config["screenshot_cmd"],
+        help=f"Screenshot command with {{}} for output path (default: {config['screenshot_cmd']})",
+    )
     args = parser.parse_args()
 
     try:
-        run_client(args.host, args.port, args.interval, args.dest)
+        run_client(args.host, args.port, args.interval, args.dest, args.screenshot_cmd)
     except KeyboardInterrupt:
         pass
 
-    log(f"[client] Stopped.")
+    log("[client] Stopped.")
 
 
 if __name__ == "__main__":

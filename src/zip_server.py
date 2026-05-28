@@ -13,10 +13,8 @@ Defaults:
 
 import argparse
 from datetime import datetime
-import hashlib
 import json
 import os
-import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 
@@ -103,11 +101,7 @@ class ZipHandler(BaseHTTPRequestHandler):
         name = os.path.basename(zip_path)
         size = os.path.getsize(zip_path)
         mtime = os.path.getmtime(zip_path)
-        md5hash = hashlib.md5()
-        with open(zip_path, "rb") as fh:
-            while chunk := fh.read(65536):
-                md5hash.update(chunk)
-        self._send_text(200, json.dumps({"status": "available", "name": name, "size": size, "mtime": round(mtime), "md5": md5hash.hexdigest()}) + "\n")
+        self._send_text(200, json.dumps({"status": "available", "name": name, "size": size, "mtime": round(mtime)}) + "\n")
 
     def _handle_download(self):
         zip_path = find_latest_zip(self.serve_folder)
@@ -146,9 +140,8 @@ class ZipHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(encoded)
 
-    def log_message(self, fmt, *args):
-        # Slightly cleaner log format
-        log(f"[server] {self.client_address[0]} - {fmt % args}")
+    def log_message(self, format, *args):
+        log(f"[server] {self.client_address[0]} - {format % args}")
 
 
 # ---------------------------------------------------------------------------
@@ -172,13 +165,13 @@ def main():
     server = HTTPServer((args.host, args.port), ZipHandler)
     log(f"[server] Listening on {args.host}:{args.port}")
     log(f"[server] Watching folder : {os.path.abspath(args.folder)}")
-    log(f"[server] Endpoints       : GET /  |  GET /status  |  GET /download")
-    log(f"[server] Press Ctrl+C to stop.\n")
+    log("[server] Endpoints       : GET /  |  GET /status  |  GET /download")
+    log("[server] Press Ctrl+C to stop.\n")
 
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        log(f"[server] Shutting down.")
+        log("[server] Shutting down.")
         server.server_close()
 
 
