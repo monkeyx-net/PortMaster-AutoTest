@@ -1,0 +1,37 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  x86_64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Build
+        run: ./build_client.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zip_client-x86_64
+          path: dist/zip_client
+
+  arm64:
+    runs-on: ubuntu-22.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Build
+        run: ./build_client.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zip_client-aarch64
+          path: dist/zip_client
