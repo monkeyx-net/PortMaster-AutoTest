@@ -2,5 +2,6 @@
   "host": "127.0.0.1",
   "port": 8765,
   "interval": 30,
-  "dest": "./downloads"
+  "dest": "./downloads",
+  "screenshot_cmd": "spectacle -b -n -o {}"
 }

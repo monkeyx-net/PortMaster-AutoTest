@@ -3,6 +3,11 @@ set -euo pipefail
 
 # Build a standalone zip_client binary using PyInstaller.
 # Usage: ./build_client.sh [--arch x86_64|aarch64]
+#
+# Optional: build the framebuffer screenshot .love file first:
+#   ./build_fbshot.sh
+# Then point the client at it:
+#   --screenshot-cmd "love /path/to/fbshot.love {}"
 
 ARCH="${1:-x86_64}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -19,7 +24,7 @@ if [ "$ARCH" = "aarch64" ] && [ "$(uname -m)" != "aarch64" ]; then
                 --distpath /work/dist --workpath /work/build \
                 --specpath /work /work/src/zip_client.py
         "
-    echo "Done — binary at: $SCRIPT_DIR/dist/zip_client"
+    echo "Done - binary at: $SCRIPT_DIR/dist/zip_client"
     exit 0
 fi
 
@@ -37,4 +42,4 @@ echo "Building zip_client with PyInstaller ..."
     --specpath "$SCRIPT_DIR" \
     "$SCRIPT_DIR/src/zip_client.py"
 
-echo "Done — binary at: $SCRIPT_DIR/dist/zip_client"
+echo "Done - binary at: $SCRIPT_DIR/dist/zip_client"

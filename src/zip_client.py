@@ -63,7 +63,9 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
 DEFAULT_INTERVAL = 30  # seconds
 DEFAULT_DEST = "./downloads"
-DEFAULT_SCREENSHOT_CMD = "spectacle -b -n -o {}"
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_FBSHOT_LOVE = os.path.join(os.path.dirname(_SCRIPT_DIR), "fbshot.love")
+DEFAULT_SCREENSHOT_CMD = f"love {_FBSHOT_LOVE} {{}}"
 
 CONNECT_TIMEOUT = 10  # seconds for HTTP connect / read
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "client.json")
@@ -185,9 +187,12 @@ def download_zip(host: str, port: int, dest: str, expected_name: str, screenshot
                     )
 
                 time.sleep(2)
-                screenshot_path = os.path.join(dest, "screenshot.png")
-                subprocess.run(shlex.split(screenshot_cmd.replace("{}", screenshot_path)))
-                log(f"[client] Saved screenshot to {screenshot_path}")
+                screenshot_path = os.path.join(os.path.abspath(dest), "screenshot.png")
+                r = subprocess.run(shlex.split(screenshot_cmd.replace("{}", screenshot_path)), capture_output=True, text=True)
+                if r.returncode != 0:
+                    log(f"[client] Screenshot failed (exit {r.returncode}): {r.stderr.strip() or r.stdout.strip()}")
+                else:
+                    log(f"[client] Saved screenshot to {screenshot_path}")
 
                 _kill_descendants(proc.pid)
                 log(f"[client] Killed app launched by {script_path}")

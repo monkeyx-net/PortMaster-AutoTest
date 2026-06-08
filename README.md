@@ -43,29 +43,27 @@ Dedup uses `name@mtime` — replaced-on a zip with the same timestamp will not t
 --port PORT       Server port (default: 8765)
 --interval SECS   Poll interval (default: 30)
 --dest DIR        Download destination (default: ./downloads)
---screenshot-cmd  Screenshot command with {} for output path (default: spectacle -b -n -o {})
+--screenshot-cmd  Screenshot command with {} for output path (default: love fbshot.love {})
 ```
 
 ## Requirements
 
 - Python 3.10+
 - Linux with `/proc` — for process tree walking
-- Screenshot tool (default: `spectacle`, configurable via `--screenshot-cmd`)
+- Screenshot tool (default: `love fbshot.love`, configurable via `--screenshot-cmd`)
 
 ## tools/fbshot — portable screenshot for ARM devices
 
-`spectacle` is KDE-only and unavailable on most PortMaster handhelds. `tools/fbshot` is a headless [Love2D](https://love2d.org/) app that reads `/dev/fb0` directly (via LuaJIT FFI + `FBIOGET_VSCREENINFO` ioctl) and saves a PNG without creating any window or disturbing the running game.
+`spectacle` is KDE-only and unavailable on most PortMaster handhelds. `tools/fbshot` is a headless [Love2D](https://love2d.org/) app that reads `/dev/fb0` into a `love.image.newImageData` (32-bit BGRA) and saves a PNG without creating any visible window.
 
-**Supported pixel formats:** RGB565 (16 bpp) and any 32 bpp format (BGRA, XRGB, RGBA — channel order is read from the ioctl response).
+Resolution is auto-detected from `/sys/class/graphics/fb0/virtual_size` or `fbset`, falling back to 640×480.
 
 **Build** the `.love` file (a plain zip):
 ```
-cd tools/fbshot && zip -0 ../../fbshot.love conf.lua main.lua
+./build_fbshot.sh
 ```
 
 **Use** it as the screenshot command:
 ```
 --screenshot-cmd "love /path/to/fbshot.love {}"
 ```
-
-Requires the `love` (Love2D 11.x) binary on the target device. On many PortMaster devices this is already present since Love2D ports are common.
