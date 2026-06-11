@@ -15,6 +15,9 @@ import argparse
 from datetime import datetime
 import json
 import os
+import socket
+import threading
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 
@@ -24,9 +27,11 @@ def log(msg: str) -> None:
 # ---------------------------------------------------------------------------
 # Configuration defaults
 # ---------------------------------------------------------------------------
-DEFAULT_HOST   = "0.0.0.0"
-DEFAULT_PORT   = 8765
-DEFAULT_FOLDER = "./serve_folder"
+DEFAULT_HOST      = "0.0.0.0"
+DEFAULT_PORT      = 8765
+DEFAULT_FOLDER    = "./serve_folder"
+DISCOVERY_PORT    = 8766
+DISCOVERY_INTERVAL = 5  # seconds between UDP broadcasts
 
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "server.json")
 
@@ -40,6 +45,22 @@ def load_config() -> dict:
         json.dump(defaults, fh, indent=2)
         fh.write("\n")
     return defaults
+
+
+def _broadcast_loop(http_port: int, discovery_port: int) -> None:
+    payload = json.dumps({"port": http_port}).encode()
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        while True:
+            try:
+                sock.sendto(payload, ("255.255.255.255", discovery_port))
+            except OSError as exc:
+                log(f"[server] Broadcast error: {exc}")
+            time.sleep(DISCOVERY_INTERVAL)
+    finally:
+        sock.close()
 
 
 def find_latest_zip(folder: str) -> str | None:
@@ -161,6 +182,10 @@ def main():
 
     # Inject config into the handler class
     ZipHandler.serve_folder = args.folder
+
+    t = threading.Thread(target=_broadcast_loop, args=(args.port, DISCOVERY_PORT), daemon=True)
+    t.start()
+    log(f"[server] Broadcasting presence on UDP port {DISCOVERY_PORT} every {DISCOVERY_INTERVAL}s")
 
     server = HTTPServer((args.host, args.port), ZipHandler)
     log(f"[server] Listening on {args.host}:{args.port}")
