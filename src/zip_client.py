@@ -22,6 +22,7 @@ import os
 import shlex
 import shutil
 import signal
+import socket
 import subprocess
 import time
 import urllib.error
@@ -67,7 +68,9 @@ _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _FBSHOT_LOVE = os.path.join(os.path.dirname(_SCRIPT_DIR), "fbshot.love")
 DEFAULT_SCREENSHOT_CMD = f"love {_FBSHOT_LOVE} {{}}"
 
-CONNECT_TIMEOUT = 10  # seconds for HTTP connect / read
+CONNECT_TIMEOUT   = 10  # seconds for HTTP connect / read
+DISCOVERY_PORT    = 8766
+DISCOVERY_TIMEOUT = 30  # seconds to wait for a broadcast before giving up
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), "client.json")
 
 
@@ -86,6 +89,33 @@ def load_config() -> dict:
         json.dump(defaults, fh, indent=2)
         fh.write("\n")
     return defaults
+
+
+# ---------------------------------------------------------------------------
+# Server discovery
+# ---------------------------------------------------------------------------
+def discover_server(discovery_port: int = DISCOVERY_PORT, timeout: int = DISCOVERY_TIMEOUT):
+    """Listen for a UDP broadcast from the server. Returns (host, port) or None."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.settimeout(timeout)
+    try:
+        sock.bind(("", discovery_port))
+        log(f"[client] Listening for server broadcast on UDP port {discovery_port} (timeout {timeout}s) …")
+        data, addr = sock.recvfrom(256)
+        info = json.loads(data.decode())
+        host = addr[0]
+        port = int(info["port"])
+        log(f"[client] Discovered server at {host}:{port}")
+        return host, port
+    except TimeoutError:
+        log("[client] Discovery timed out, using configured host.")
+        return None
+    except (OSError, json.JSONDecodeError, KeyError, ValueError) as exc:
+        log(f"[client] Discovery error: {exc}")
+        return None
+    finally:
+        sock.close()
 
 
 # ---------------------------------------------------------------------------
@@ -268,8 +298,8 @@ def main():
     parser = argparse.ArgumentParser(description="Zip-file polling client")
     parser.add_argument(
         "--host",
-        default=config["host"],
-        help=f"Server host (default: {config['host']})",
+        default=None,
+        help=f"Server host; if omitted, auto-discover via UDP broadcast (fallback: {config['host']})",
     )
     parser.add_argument(
         "--port",
@@ -295,8 +325,16 @@ def main():
     )
     args = parser.parse_args()
 
+    if args.host is None:
+        discovered = discover_server()
+        host = discovered[0] if discovered else config["host"]
+        port = discovered[1] if discovered else args.port
+    else:
+        host = args.host
+        port = args.port
+
     try:
-        run_client(args.host, args.port, args.interval, args.dest, args.screenshot_cmd)
+        run_client(host, port, args.interval, args.dest, args.screenshot_cmd)
     except KeyboardInterrupt:
         pass
 
